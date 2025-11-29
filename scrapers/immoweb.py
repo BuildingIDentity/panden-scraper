@@ -1,42 +1,38 @@
 from utils.fetcher import fetch
 from utils.db import get_connection
-from utils.filters import is_particulier
 from bs4 import BeautifulSoup
 import json
 
-def scrape_immoweb(postcode):
-    url = f"https://www.immoweb.be/nl/zoeken/huis/te-koop/postcode-{postcode}"
+def scrape_immoweb(postcode, type_mode):
+    if type_mode == "koop":
+        url = f"https://www.immoweb.be/nl/search?type=HOUSE&transaction=SALE&postalCode={postcode}"
+    else:
+        url = f"https://www.immoweb.be/nl/search?type=HOUSE&transaction=RENT&postalCode={postcode}"
+
     html = fetch(url)
     if not html:
+        print("Geen HTML ontvangen van Immoweb")
         return
-    
+
     soup = BeautifulSoup(html, "lxml")
-    results = soup.select("a.card--result")
-    
+    items = soup.select("a.card__title")
+
     conn = get_connection()
     cur = conn.cursor()
 
-    for item in results:
-        link = item.get("href")
-        titel = item.select_one(".result-title")
-        titel = titel.text.strip() if titel else ""
+    for item in items:
+        link = "https://www.immoweb.be" + item.get("href")
+        titel = item.text.strip()
 
-        prijs = item.select_one(".result-price")
-        prijs = prijs.text.strip() if prijs else ""
-
-        extern_id = None
-        if link and "/id/" in link:
-            extern_id = link.split("/id/")[1][:10]
-
-        particulier = is_particulier(titel, "", item.text)
+        extern_id = link.split("/")[-1]
 
         cur.execute("""
-            INSERT INTO panden (bron, extern_id, type, particulier, postcode, titel, prijs, link, data)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO panden (bron, extern_id, type, particulier, postcode, titel, link, data)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (bron, extern_id)
             DO UPDATE SET updated_at = NOW();
-        """, ("immoweb", extern_id, "koop", particulier, postcode, titel, prijs, link, json.dumps({"raw": item.text})))
+        """, ("immoweb", extern_id, type_mode, False, postcode, titel, link, json.dumps({"raw": titel})))
 
     conn.commit()
     conn.close()
-
+    print(f"Immoweb klaar voor {postcode}")
