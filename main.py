@@ -11,38 +11,33 @@ def load_postcodes():
         return json.load(f)
 
 def main():
-    print("Initialiseren tabellen...")
-    init_tables()
+        print("Initialiseren tabellen...")
+        init_tables()
 
-    postcodes = load_postcodes()
+        postcodes = load_postcodes()
 
-    # Test enkel 1000 en 1005
-    for pc in postcodes[:2]:
-        print(f"Scrapen immoweb {pc}")
+        for pc in postcodes[:2]:
+            print(f"Scrapen immoweb {pc}")
+            scrape_immoweb(pc, "koop")
+            scrape_immoweb(pc, "huur")
 
-        # Koop
-        scrape_immoweb(pc, "koop")
-        # Huur
-        scrape_immoweb(pc, "huur")
+            print(f"Scrapen zimmo {pc}")
+            scrape_zimmo(pc, "koop")
+            scrape_zimmo(pc, "huur")
 
-        # Andere scrapers
-        print(f"Scrapen zimmo {pc}")
-        scrape_zimmo(pc, "koop")
-        scrape_zimmo(pc, "huur")
+            print(f"Scrapen immoscoop {pc}")
+            scrape_immoscoop(pc, "koop")
+            scrape_immoscoop(pc, "huur")
 
-        print(f"Scrapen immoscoop {pc}")
-        scrape_immoscoop(pc, "koop")
-        scrape_immoscoop(pc, "huur")
+            print(f"Scrapen tweedehands {pc}")
+            scrape_tweedehands(pc, "koop")
+            scrape_tweedehands(pc, "huur")
 
-        print(f"Scrapen tweedehands {pc}")
-        scrape_tweedehands(pc, "koop")
-        scrape_tweedehands(pc, "huur")
+            print(f"Scrapen immovlam {pc}")
+            scrape_immovlam(pc, "koop")
+            scrape_immovlam(pc, "huur")
 
-        print(f"Scrapen immovlam {pc}")
-        scrape_immovlam(pc, "koop")
-        scrape_immovlam(pc, "huur")
-
-    print("Klaar.")
+        print("Klaar.")
 
 if __name__ == "__main__":
     main()
