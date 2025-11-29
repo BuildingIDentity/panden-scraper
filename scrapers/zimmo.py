@@ -1,47 +1,56 @@
-from utils.fetcher import fetch
-from utils.db import get_connection
-from utils.filters import is_particulier
+import requests
 from bs4 import BeautifulSoup
 import json
+from utils.db import save_property
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 def scrape_zimmo(postcode, type_mode):
-    # type_mode = "koop" of "huur"
-    if type_mode == "koop":
-        base = f"https://www.zimmo.be/nl/zoeken/?location={postcode}&status=1"
-    else:
-        base = f"https://www.zimmo.be/nl/zoeken/?location={postcode}&status=2"
+    print(f"[Zimmo] Start {postcode} ({type_mode})")
 
-    html = fetch(base)
-    if not html:
+    status = "1" if type_mode == "koop" else "2"
+    url = f"https://www.zimmo.be/nl/zoeken/?location={postcode}&status={status}"
+
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    if r.status_code != 200:
+        print(f"[Zimmo] Fout {r.status_code}")
         return
 
-    soup = BeautifulSoup(html, "lxml")
-    items = soup.select(".property-item")
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    conn = get_connection()
-    cur = conn.cursor()
+    # JSON staat in window.__SSR_STATE__
+    script = soup.find("script", string=lambda s: s and "window.__SSR_STATE__" in s)
+    if not script:
+        print("[Zimmo] Geen JSON gevonden")
+        return
 
-    for x in items:
-        link = x.get("href")
-        titel = x.select_one(".property-item--title")
-        titel = titel.text.strip() if titel else ""
+    json_text = script.string.split("window.__SSR_STATE__ =")[-1].strip()
+    json_text = json_text[:-1] if json_text.endswith(";") else json_text
 
-        prijs = x.select_one(".price")
-        prijs = prijs.text.strip() if prijs else ""
+    data = json.loads(json_text)
 
-        extern_id = None
-        if link:
-            extern_id = link.split("/")[-2]
+    properties = data.get("listing", {}).get("results", [])
+    total = 0
 
-        particulier = is_particulier(titel, "", x.text)
+    for p in properties:
+        extern_id = str(p.get("id"))
+        titel = p.get("title", "")
+        prijs = p.get("price", "")
+        link = p.get("url", "")
 
-        cur.execute("""
-            INSERT INTO panden (bron, extern_id, type, particulier, postcode, titel, prijs, link, data)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (bron, extern_id)
-            DO UPDATE SET updated_at = NOW();
-        """, ("zimmo", extern_id, type_mode, particulier, postcode, titel, prijs, link, json.dumps({"raw": x.text})))
+        save_property(
+            "zimmo",
+            extern_id,
+            type_mode,
+            p.get("isPrivate", False),
+            str(postcode),
+            titel,
+            prijs,
+            link,
+            p
+        )
+        total += 1
 
-    conn.commit()
-    conn.close()
-
+    print(f"[Zimmo] Klaar. {total} panden opgeslagen.")
