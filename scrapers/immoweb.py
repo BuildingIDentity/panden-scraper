@@ -1,47 +1,58 @@
-from utils.fetcher import fetch
-from utils.db import get_connection
-from bs4 import BeautifulSoup
+import requests
+from utils.db import save_property
 import json
 
+BASE_URL = "https://api.immoweb.be/search/search-results"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
+
 def scrape_immoweb(postcode, type_mode):
-    if type_mode == "koop":
-        url = f"https://www.immoweb.be/nl/search?type=HOUSE&transaction=SALE&postalCode={postcode}"
-    else:
-        url = f"https://www.immoweb.be/nl/search?type=HOUSE&transaction=RENT&postalCode={postcode}"
+    print(f"[Immoweb] Start {postcode} ({type_mode})")
 
-    print(f"[Immoweb] URL: {url}")
+    transaction = "FOR_SALE" if type_mode == "koop" else "FOR_RENT"
+    page = 1
+    total = 0
 
-    html = fetch(url)
-    if not html:
-        print("[Immoweb] Geen HTML ontvangen (fetch = None)")
-        return
+    while True:
+        url = (
+            f"{BASE_URL}?postalCode={postcode}"
+            f"&transactionTypes={transaction}"
+            f"&propertyTypes=HOUSE&page={page}"
+        )
 
-    print("[Immoweb] HTML ontvangen")
+        r = requests.get(url, headers=HEADERS, timeout=20)
+        if r.status_code != 200:
+            print(f"[Immoweb] Fout {r.status_code}")
+            break
 
-    soup = BeautifulSoup(html, "lxml")
-    items = soup.select("a.card__title")
+        data = r.json()
+        results = data.get("results", [])
+        if not results:
+            print(f"[Immoweb] Geen resultaten meer op pagina {page}")
+            break
 
-    print(f"[Immoweb] Gevonden items: {len(items)}")
+        for item in results:
+            extern_id = str(item.get("id"))
+            titel = item.get("title", "")
+            prijs = item.get("price", {}).get("mainValue", "")
+            link = f"https://www.immoweb.be/nl/zoekertje/{extern_id}"
 
-    if len(items) == 0:
-        print("[Immoweb] Waarschijnlijk nog steeds geblokkeerd of andere selector")
-        return
+            save_property(
+                "immoweb",
+                extern_id,
+                type_mode,
+                False,
+                str(postcode),
+                titel,
+                prijs,
+                link,
+                item
+            )
+            total += 1
 
-    conn = get_connection()
-    cur = conn.cursor()
+        page += 1
 
-    for item in items:
-        link = "https://www.immoweb.be" + item.get("href")
-        titel = item.text.strip()
-        extern_id = link.split("/")[-1]
-
-        cur.execute("""
-            INSERT INTO panden (bron, extern_id, type, particulier, postcode, titel, link, data)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (bron, extern_id)
-            DO UPDATE SET updated_at = NOW();
-        """, ("immoweb", extern_id, type_mode, False, postcode, titel, link, json.dumps({"raw": titel})))
-
-    conn.commit()
-    conn.close()
-    print(f"[Immoweb] Klaar voor {postcode} ({type_mode})")
+    print(f"[Immoweb] Klaar. {total} panden opgeslagen.")
