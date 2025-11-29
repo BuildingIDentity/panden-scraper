@@ -1,24 +1,31 @@
 import requests
+import time
+import random
 
-def fetch(url):
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) "
-            "Gecko/20100101 Firefox/117.0"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "nl,en-US;q=0.7,en;q=0.3",
-        "Referer": "https://www.google.com/",
-        "DNT": "1",
-        "Upgrade-Insecure-Requests": "1",
-    }
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        " AppleWebKit/537.36 (KHTML, like Gecko)"
+        " Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "nl-BE,nl;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+    "Connection": "keep-alive"
+}
 
-    try:
-        r = requests.get(url, headers=headers, timeout=20)
-        if r.status_code != 200:
-            print(f"Fout {r.status_code} bij {url}")
-            return None
-        return r.text
-    except Exception as e:
-        print(f"Request fout bij {url}: {e}")
-        return None
+def fetch(url, tries=3):
+    for attempt in range(tries):
+        try:
+            time.sleep(random.uniform(0.5, 1.2))
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            if r.status_code == 200:
+                return r.text
+            else:
+                print(f"[fetch] status {r.status_code} bij {url}")
+        except Exception as e:
+            print(f"[fetch] error: {e}")
+
+        print("[fetch] retry…")
+        time.sleep(1 + attempt * 1.5)
+
+    return None
