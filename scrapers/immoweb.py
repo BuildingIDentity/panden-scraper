@@ -9,13 +9,23 @@ def scrape_immoweb(postcode, type_mode):
     else:
         url = f"https://www.immoweb.be/nl/search?type=HOUSE&transaction=RENT&postalCode={postcode}"
 
+    print(f"[Immoweb] URL: {url}")
+
     html = fetch(url)
     if not html:
-        print("Geen HTML ontvangen van Immoweb")
+        print("[Immoweb] Geen HTML ontvangen (fetch = None)")
         return
+
+    print("[Immoweb] HTML ontvangen")
 
     soup = BeautifulSoup(html, "lxml")
     items = soup.select("a.card__title")
+
+    print(f"[Immoweb] Gevonden items: {len(items)}")
+
+    if len(items) == 0:
+        print("[Immoweb] Waarschijnlijk nog steeds geblokkeerd of andere selector")
+        return
 
     conn = get_connection()
     cur = conn.cursor()
@@ -23,7 +33,6 @@ def scrape_immoweb(postcode, type_mode):
     for item in items:
         link = "https://www.immoweb.be" + item.get("href")
         titel = item.text.strip()
-
         extern_id = link.split("/")[-1]
 
         cur.execute("""
@@ -35,4 +44,4 @@ def scrape_immoweb(postcode, type_mode):
 
     conn.commit()
     conn.close()
-    print(f"Immoweb klaar voor {postcode}")
+    print(f"[Immoweb] Klaar voor {postcode} ({type_mode})")
