@@ -1,53 +1,23 @@
-import requests
-from utils.db import save_property
+import json
+from utils.db import init_tables
+from scrapers.zimmo import scrape_zimmo
 
-def scrape_zimmo(postcode, type_mode):
-    print(f"[Zimmo] Start {postcode} ({type_mode})")
+def load_postcodes():
+    with open("config/postcodes.json", "r") as f:
+        return json.load(f)
 
-    type_filter = "1" if type_mode == "koop" else "2"
+def main():
+    print("Initialiseren tabellen...")
+    init_tables()
 
-    url = (
-        f"https://www.zimmo.be/nl/zoeken/?"
-        f"location={postcode}&status={type_filter}&result=JSON"
-    )
+    postcodes = load_postcodes()
 
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
+    for pc in postcodes[:1]:   # enkel 1 postcode om te testen
+        print(f"Scrapen zimmo {pc}")
+        scrape_zimmo(pc, "koop")
+        scrape_zimmo(pc, "huur")
 
-    try:
-        r = requests.get(url, headers=headers, timeout=20)
-        data = r.json()
-    except Exception as e:
-        print(f"[Zimmo] Fout: {e}")
-        return
+    print("Klaar.")
 
-    results = data.get("items", [])
-
-    if not results:
-        print("[Zimmo] Geen items gevonden.")
-        return
-
-    for item in results:
-        try:
-            extern_id = item["id"]
-            title = item.get("title", "Zonder titel")
-            price = item.get("price", "Onbekend")
-            link = item["url"]
-
-            save_property(
-                "zimmo",
-                extern_id,
-                type_mode,
-                False,
-                str(postcode),
-                title,
-                price,
-                link,
-                item
-            )
-        except Exception as e:
-            print(f"[Zimmo] Error item: {e}")
-
-    print(f"[Zimmo] Klaar ({len(results)} panden).")
+if __name__ == "__main__":
+    main()
