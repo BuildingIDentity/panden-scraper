@@ -1,56 +1,68 @@
 import requests
 from bs4 import BeautifulSoup
-import json
+import time
+import random
 from utils.db import save_property
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "nl-NL,nl;q=0.9",
+    "Referer": "https://www.zimmo.be/nl/",
+    "Connection": "keep-alive",
 }
 
 def scrape_zimmo(postcode, type_mode):
     print(f"[Zimmo] Start {postcode} ({type_mode})")
 
     status = "1" if type_mode == "koop" else "2"
-    url = f"https://www.zimmo.be/nl/zoeken/?location={postcode}&status={status}"
+    url = f"https://www.zimmo.be/nl/zoeken/?status={status}&location={postcode}"
 
-    r = requests.get(url, headers=HEADERS, timeout=20)
+    try:
+        time.sleep(random.uniform(1.2, 2.0))
+        r = requests.get(url, headers=HEADERS, timeout=20)
+    except Exception as e:
+        print(f"[Zimmo] Request error: {e}")
+        return
+
     if r.status_code != 200:
         print(f"[Zimmo] Fout {r.status_code}")
         return
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(r.text, "lxml")
 
-    # JSON staat in window.__SSR_STATE__
-    script = soup.find("script", string=lambda s: s and "window.__SSR_STATE__" in s)
-    if not script:
-        print("[Zimmo] Geen JSON gevonden")
+    items = soup.select("article.search-results__item")
+    print(f"[Zimmo] gevonden: {len(items)} items")
+
+    if len(items) == 0:
+        print("[Zimmo] Geen resultaten gevonden (selector?)")
         return
 
-    json_text = script.string.split("window.__SSR_STATE__ =")[-1].strip()
-    json_text = json_text[:-1] if json_text.endswith(";") else json_text
+    for item in items:
+        link_tag = item.select_one("a")
+        title_tag = item.select_one("h2.search-results__title")
+        price_tag = item.select_one("div.search-results__price")
 
-    data = json.loads(json_text)
+        link = "https://www.zimmo.be" + link_tag.get("href") if link_tag else None
+        title = title_tag.get_text(strip=True) if title_tag else ""
+        price = price_tag.get_text(strip=True) if price_tag else ""
 
-    properties = data.get("listing", {}).get("results", [])
-    total = 0
-
-    for p in properties:
-        extern_id = str(p.get("id"))
-        titel = p.get("title", "")
-        prijs = p.get("price", "")
-        link = p.get("url", "")
+        extern_id = link.split("/")[-2] if link else None
 
         save_property(
             "zimmo",
             extern_id,
             type_mode,
-            p.get("isPrivate", False),
+            False,
             str(postcode),
-            titel,
-            prijs,
+            title,
+            price,
             link,
-            p
+            {"raw": item.get_text(strip=True)}
         )
-        total += 1
 
-    print(f"[Zimmo] Klaar. {total} panden opgeslagen.")
+    print(f"[Zimmo] Klaar.")
