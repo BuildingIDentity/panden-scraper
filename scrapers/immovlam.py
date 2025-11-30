@@ -3,52 +3,67 @@ from bs4 import BeautifulSoup
 from utils.db import save_property
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        " AppleWebKit/537.36 (KHTML, like Gecko)"
+        " Chrome/120.0.0.0 Safari/537.36"
+    )
 }
 
 def scrape_immovlam(postcode, type_mode):
-    print(f"[Immovlam] Start {postcode} ({type_mode})")
+    print(f"[Immovlan] Start {postcode} ({type_mode})")
 
-    transaction = "SALE" if type_mode == "koop" else "RENT"
+    # correct domein + correcte URL-structuur
+    if type_mode == "koop":
+        url = f"https://www.immovlan.be/nl/zoeken/huis/te-koop?loc={postcode}"
+    else:
+        url = f"https://www.immovlan.be/nl/zoeken/huis/te-huur?loc={postcode}"
 
-    url = (
-        "https://www.immovlam.be/nl/zoeken"
-        f"?type=HOUSE&transaction={transaction}&postalCode={postcode}"
-    )
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=20)
+    except Exception as e:
+        print(f"[Immovlan] Request error: {e}")
+        return
 
-    r = requests.get(url, headers=HEADERS, timeout=20)
     if r.status_code != 200:
-        print(f"[Immovlam] Fout {r.status_code}")
+        print(f"[Immovlan] Fout {r.status_code} bij {url}")
         return
 
     soup = BeautifulSoup(r.text, "html.parser")
-    cards = soup.select(".search-result__item")
 
-    total = 0
+    cards = soup.select(".search-results__item")
 
-    for c in cards:
-        title_el = c.select_one(".search-result__title")
-        titel = title_el.text.strip() if title_el else ""
+    if not cards:
+        print(f"[Immovlan] Geen resultaten gevonden.")
+        return
 
-        price_el = c.select_one(".search-result__price")
-        prijs = price_el.text.strip() if price_el else ""
+    for card in cards:
+        try:
+            link_el = card.select_one("a")
+            link = link_el["href"] if link_el else None
+            if link and link.startswith("/"):
+                link = "https://www.immovlan.be" + link
 
-        link_el = c.select_one("a")
-        link = "https://www.immovlam.be" + link_el["href"]
+            extern_id = link.split("/")[-1] if link else None
 
-        extern_id = link.split("/")[-1]
+            title_el = card.select_one("h2")
+            title = title_el.get_text(strip=True) if title_el else "Geen titel"
 
-        save_property(
-            "immovlam",
-            extern_id,
-            type_mode,
-            False,
-            str(postcode),
-            titel,
-            prijs,
-            link,
-            {"raw": c.text}
-        )
-        total += 1
+            price_el = card.select_one(".search-results__price")
+            price = price_el.get_text(strip=True) if price_el else "?"
 
-    print(f"[Immovlam] Klaar. {total} panden opgeslagen.")
+            save_property(
+                "immovlan",
+                extern_id,
+                type_mode,
+                False,
+                str(postcode),
+                title,
+                price,
+                link,
+                {"raw": card.text[:2000]},
+            )
+        except Exception as e:
+            print(f"[Immovlan] Fout bij item: {e}")
+
+    print(f"[Immovlan] Klaar voor {postcode}.")
