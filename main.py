@@ -1,24 +1,36 @@
-import json
-from utils.db import init_tables
-from scrapers.zimmo import scrape_zimmo
+from flask import Flask, request, jsonify
+from scrapers.zimmo_html import scrape_zimmo_html
 
-def load_postcodes():
-    with open("config/postcodes.json", "r") as f:
-        return json.load(f)
+app = Flask(__name__)
 
-def main():
-    print("Initialiseren tabellen...")
-    init_tables()
+def parse_postcodes(input_str):
+    pcs = set()
+    parts = input_str.split(",")
+    for p in parts:
+        p = p.strip()
+        if "-" in p:
+            s, e = p.split("-")
+            for x in range(int(s), int(e)+1):
+                pcs.add(str(x))
+        else:
+            pcs.add(p)
+    return sorted(pcs)
 
-    postcodes = load_postcodes()
+@app.route("/")
+def home():
+    return jsonify({"status": "online"})
 
-    for pc in postcodes[:1]:   # enkel 1 postcode om te testen
-        print(f"Scrapen zimmo {pc}")
-        scrape_zimmo(pc, "koop")
-        scrape_zimmo(pc, "huur")
+@app.post("/scrape_zimmo")
+def start_zimmo():
+    data = request.get_json() or {}
+    raw = data.get("postcodes", "")
+    postcodes = parse_postcodes(raw)
 
-    print("Klaar.")
+    for pc in postcodes:
+        scrape_zimmo_html(pc, "koop")
+        scrape_zimmo_html(pc, "huur")
 
-# Heroku gebruikt gunicorn, dus lokaal runnen mag wel:
+    return jsonify({"status": "ok", "postcodes": postcodes})
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run()
