@@ -58,6 +58,20 @@ def test_zimmo():
         return {"status": "ok", "message": "Test scrape uitgevoerd (koop 9000)"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+@app.get("/test_scrape")
+def test_scrape():
+    try:
+        result = scrape_zimmo_html("9000", "koop")
+        return {
+            "status": "ok",
+            "message": "Test scrape uitgevoerd",
+            "resultaat": str(result)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 if __name__ == "__main__":
