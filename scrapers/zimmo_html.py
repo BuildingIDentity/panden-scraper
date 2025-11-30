@@ -27,7 +27,6 @@ def scrape_zimmo_html(postcode, type_mode):
         return
 
     soup = BeautifulSoup(r.text, "html.parser")
-
     cards = soup.select(".property-item--list")
 
     if not cards:
