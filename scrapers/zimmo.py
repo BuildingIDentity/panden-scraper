@@ -1,23 +1,53 @@
-import json
-from utils.db import init_tables
-from scrapers.zimmo import scrape_zimmo
+import requests
+from utils.db import save_property
 
-def load_postcodes():
-    with open("config/postcodes.json", "r") as f:
-        return json.load(f)
+def scrape_zimmo(postcode, type_mode):
+    print(f"[Zimmo] Start {postcode} ({type_mode})")
 
-def main():
-    print("Initialiseren tabellen...")
-    init_tables()
+    # type 1 = koop, type 2 = huur
+    status = "1" if type_mode == "koop" else "2"
 
-    postcodes = load_postcodes()
+    url = (
+        f"https://www.zimmo.be/nl/zoeken/"
+        f"?location={postcode}&status={status}&result=JSON"
+    )
 
-    for pc in postcodes[:1]:   # enkel 1 postcode om te testen
-        print(f"Scrapen zimmo {pc}")
-        scrape_zimmo(pc, "koop")
-        scrape_zimmo(pc, "huur")
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }
 
-    print("Klaar.")
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 403:
+            print("[Zimmo] 403: Zimmo blokkeert je request")
+            print("→ Dit lossen we op met cookies, geen paniek.")
+            return
 
-if __name__ == "__main__":
-    main()
+        data = resp.json()
+    except Exception as e:
+        print(f"[Zimmo] Fout: {e}")
+        return
+
+    items = data.get("items", [])
+    if not items:
+        print("[Zimmo] Geen items gevonden.")
+        return
+
+    for item in items:
+        try:
+            save_property(
+                "zimmo",
+                item.get("id"),
+                type_mode,
+                False,
+                str(postcode),
+                item.get("title", "Zonder titel"),
+                item.get("price", "Onbekend"),
+                item.get("url"),
+                item,
+            )
+        except Exception as e:
+            print("[Zimmo] Item fout:", e)
+
+    print(f"[Zimmo] Klaar ({len(items)} panden)")
