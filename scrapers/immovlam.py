@@ -10,7 +10,7 @@ HEADERS = {
     )
 }
 
-def scrape_immovlam(postcode, type_mode):
+def scrape_immovlan(postcode, type_mode):
     print(f"[Immovlan] Start {postcode} ({type_mode})")
 
     # correct domein + correcte URL-structuur
